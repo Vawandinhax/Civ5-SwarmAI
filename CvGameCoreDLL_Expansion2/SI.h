@@ -11,4 +11,7 @@
 // SI mod new GUID
 #define SI_GUID
 
+// Properly destroy 2D arrays, credit to Delnar_Ersike
+#define AUI_DATABASE_UTILITY_PROPER_2D_ALLOCATION_AND_DESTRUCTION
+
 #endif

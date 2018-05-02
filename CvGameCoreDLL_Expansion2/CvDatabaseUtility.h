@@ -35,14 +35,25 @@ public:
 	void InitializeArray(int*& pArray, const size_t count, int iDefault = 0);
 	void InitializeArray(bool*& pArray, const size_t count, bool bDefault = false);
 	void InitializeArray(float*& pArray, const size_t count, float fDefault = 0.0f);
+
+#ifdef AUI_DATABASE_UTILITY_PROPER_2D_ALLOCATION_AND_DESTRUCTION
+	bool Initialize2DArray(int**& ppArray, const size_t iCount1, const size_t iCount2, int iDefault = 0);
+#else
 	void Initialize2DArray(int**& ppArray, const size_t iCount1, const size_t iCount2, int iDefault = 0);
+#endif
 
 	//!Allocates an array to Count(szTableName) and zero's memory.
 	template<typename T>
-void InitializeArray(T*& pArray, const char* szTableName, T default = (T)0);
+	void InitializeArray(T*& pArray, const char* szTableName, T default = (T)0);
 
 	bool Initialize2DArray(int**& pArray, const char* szTable1Name, const char* szTable2Name, int iDefault = 0);
+
+#ifdef AUI_DATABASE_UTILITY_PROPER_2D_ALLOCATION_AND_DESTRUCTION
+    void SafeDelete2DArray(int**& ppArray, const char* szTable1Name);
+    static void SafeDelete2DArray(int**& ppArray, const size_t iRowCount);
+#else
 	static void SafeDelete2DArray(int**& pArray);
+#endif
 
 
 	//!Allocates an array to Count(szTypeTableName) and initializes to false.

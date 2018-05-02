@@ -234,10 +234,17 @@ protected:
 	bool* m_pbFeatureMakesValid;
 	bool* m_pbImprovementMakesValid;
 
+#ifdef AUI_DATABASE_UTILITY_PROPER_2D_ALLOCATION_AND_DESTRUCTION
+	std::pair<int**, size_t> m_ppiTechYieldChanges;
+	std::pair<int**, size_t> m_ppiTechNoFreshWaterYieldChanges;
+	std::pair<int**, size_t> m_ppiTechFreshWaterYieldChanges;
+	std::pair<int**, size_t> m_ppiRouteYieldChanges;
+#else
 	int** m_ppiTechYieldChanges;
 	int** m_ppiTechNoFreshWaterYieldChanges;
 	int** m_ppiTechFreshWaterYieldChanges;
 	int** m_ppiRouteYieldChanges;
+#endif
 
 	CvImprovementResourceInfo* m_paImprovementResource;
 };

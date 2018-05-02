@@ -172,13 +172,24 @@ protected:
 	int* m_paiYieldChangePerForeignCity;
 	int* m_paiYieldChangePerXForeignFollowers;
 	int* m_piResourceQuantityModifiers;
+#ifdef AUI_DATABASE_UTILITY_PROPER_2D_ALLOCATION_AND_DESTRUCTION
+	std::pair<int**, size_t> m_ppiImprovementYieldChanges;
+	std::pair<int**, size_t> m_ppiBuildingClassYieldChanges;
+#else
 	int** m_ppiImprovementYieldChanges;
 	int** m_ppiBuildingClassYieldChanges;
+#endif
 	int* m_paiBuildingClassHappiness;
 	int* m_paiBuildingClassTourism;
+#ifdef AUI_DATABASE_UTILITY_PROPER_2D_ALLOCATION_AND_DESTRUCTION
+	std::pair<int**, size_t> m_ppaiFeatureYieldChange;
+	std::pair<int**, size_t> m_ppaiResourceYieldChange;
+	std::pair<int**, size_t> m_ppaiTerrainYieldChange;
+#else
 	int** m_ppaiFeatureYieldChange;
 	int** m_ppaiResourceYieldChange;
 	int** m_ppaiTerrainYieldChange;
+#endif
 	int* m_piResourceHappiness;
 	int* m_piYieldChangeAnySpecialist;
 	int* m_piYieldChangeTradeRoute;
