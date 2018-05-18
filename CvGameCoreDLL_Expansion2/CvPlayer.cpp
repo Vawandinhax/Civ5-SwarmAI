@@ -415,7 +415,26 @@ CvPlayer::CvPlayer() :
 	m_pReligionAI = FNEW(CvReligionAI, c_eCiv5GameplayDLL, 0);
 	m_pPlayerTechs = FNEW(CvPlayerTechs, c_eCiv5GameplayDLL, 0);
 	m_pFlavorManager = FNEW(CvFlavorManager, c_eCiv5GameplayDLL, 0);
+#ifdef SI_NEW_TACTICAL_AI_INIT
+	std::string civ(getCivilizationShortDescription());
+	if (civ == "Portugal")
+	{
+	m_pTacticalAI = FNEW(CvSITacticalAI, c_eCiv5GameplayDLL, 0);
+	CvString initmessage;
+	initmessage.Format("INITIALIZED SI TACTICAL AI CORRECTLY FOR Portugal");
+	m_pTacticalAI->LogTacticalMessage(initmessage);
+	}
+	else
+	{
 	m_pTacticalAI = FNEW(CvTacticalAI, c_eCiv5GameplayDLL, 0);
+	CvString initmessage;
+	initmessage.Format("INITIALIZED SI TACTICAL AI CORRECTLY FOR");
+	initmessage += " Not Portugal";
+	m_pTacticalAI->LogTacticalMessage(initmessage);
+	}
+#else
+	m_pTacticalAI = FNEW(CvTacticalAI, c_eCiv5GameplayDLL, 0);
+#endif
 	m_pHomelandAI = FNEW(CvHomelandAI, c_eCiv5GameplayDLL, 0);
 	m_pMinorCivAI = FNEW(CvMinorCivAI, c_eCiv5GameplayDLL, 0);
 	m_pDealAI = FNEW(CvDealAI, c_eCiv5GameplayDLL, 0);
@@ -1123,7 +1142,30 @@ void CvPlayer::reset(PlayerTypes eID, bool bConstructorCall)
 		m_pReligionAI->Init(GC.GetGameBeliefs(), this);
 		m_pPlayerTechs->Init(GC.GetGameTechs(), this, false);
 		m_pPlayerPolicies->Init(GC.GetGamePolicies(), this, false);
+#ifdef SI_NEW_TACTICAL_AI_INIT
+		std::string civ(getCivilizationShortDescription());
+		if ((civ == "Portugal") || (civ == "portugal") || (civ == "PORTUGAL"))
+		{
+			if(m_pTacticalAI) 
+			{ 
+				delete m_pTacticalAI;
+				m_pTacticalAI = FNEW(CvSITacticalAI, c_eCiv5GameplayDLL, 0);
+			}
+			CvString initmessage;
+			initmessage.Format("INITIALIZED SI TACTICAL AI CORRECTLY FOR Portugal");
+			m_pTacticalAI->LogTacticalMessage(initmessage);
+			m_pTacticalAI->Init(this);
+		}
+		else
+		{
+			m_pTacticalAI->Init(this);
+			CvString initmessage;
+			initmessage.Format("INITIALIZED TACTICAL AI CORRECTLY FOR A COUNTRY THAT ISNT PORTUGAL");
+			m_pTacticalAI->LogTacticalMessage(initmessage);
+		}
+#else
 		m_pTacticalAI->Init(this);
+#endif
 		m_pHomelandAI->Init(this);
 		m_pMinorCivAI->Init(this);
 		m_pDealAI->Init(this);

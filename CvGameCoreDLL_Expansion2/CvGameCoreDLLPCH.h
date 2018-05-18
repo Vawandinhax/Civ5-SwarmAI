@@ -113,6 +113,7 @@ typedef wchar_t          wchar;
 #include "CvPlot.h"
 #include "CvTacticalAnalysisMap.h"
 #include "CvTacticalAI.h"
+#include "CvSITacticalAI.h"
 #include "CvHomelandAI.h"
 #include "CvUnit.h"
 #include "CvGlobals.h"

@@ -10671,7 +10671,7 @@ void CvTacticalAI::LogTacticalMessage(CvString& strMsg, bool bSkipLogDominanceZo
 		pLog = LOGFILEMGR.GetLog(GetLogFileName(strPlayerName), FILogFile::kDontTimeStamp);
 
 		// Get the leading info for this line
-		strBaseString.Format("%03d, ", GC.getGame().getElapsedGameTurns());
+		strBaseString.Format("Turn: %03d, ", GC.getGame().getElapsedGameTurns());
 		strBaseString += strPlayerName + ", ";
 		strTemp = "no zone, ";
 		if(!bSkipLogDominanceZone)
