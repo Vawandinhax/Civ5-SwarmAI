@@ -741,6 +741,87 @@ enum TacticalAIInfoTypes
 typedef FStaticVector<CvTacticalTarget, 256, false, c_eCiv5GameplayDLL > TacticalList;
 
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+//  CLASS:      CvSITacticalIntent
+//!  \brief		A units intention for the turn
+//
+//!  Key Attributes:
+//!  - Created on CvSISelfishPhase()
+//!  - Updated during CvSINegotiationPhase()
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+enum TacticalIntentTypes
+{
+	eNO_INTENT,
+	eSI_TACTICAL_ATTACK,
+	eSI_TACTICAL_MOVE,
+	eSI_FORTIFY_HEAL
+};
+
+
+
+class CvSITacticalIntent
+{
+public:
+	CvSITacticalIntent()
+	{
+		m_pTargetPlot = NULL;
+		m_eIntent = eNO_INTENT;
+		m_iUnitID = 0;
+		m_iHeuristicValue = 0;
+	};
+	CvPlot* GetPlot() const
+	{
+		return m_pTargetPlot;
+	};
+	void SetPlot(CvPlot* pPlot)
+	{
+		m_pTargetPlot = pPlot;
+	};
+	int GetIntent() const
+	{
+		return m_eIntent;
+	};
+	void SetIntent(int eIntent) 
+	{
+		m_eIntent = eIntent;
+	};
+	int GetUnitID() const
+	{
+		return m_iUnitID;
+	};
+	void SetUnitID(int iID)
+	{
+		m_iUnitID = iID;
+	};
+	int GetHeuristicValue() const
+	{
+		return m_iHeuristicValue;
+	};
+	void SetHeuristicValue(int iHeuristicValue) 
+	{
+		m_iHeuristicValue = iHeuristicValue;
+	};
+	CvTacticalTarget* GetTarget()
+	{
+		return &m_pTarget;
+	}
+	void SetTarget(CvTacticalTarget* pTarget)
+	{
+		m_pTarget = *pTarget;
+	}
+
+private:
+	CvPlot* m_pTargetPlot;
+	int m_eIntent;
+	int m_iUnitID;
+	int m_iHeuristicValue;
+	CvTacticalTarget m_pTarget;
+};
+
+typedef FStaticVector<CvSITacticalIntent, 256, false, c_eCiv5GameplayDLL > IntentList;
+
+class CvInfluenceMap;
+
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 //  CLASS:      CvTacticalAI
 //!  \brief		A player's AI to control units as they fight out battles
 //
@@ -787,8 +868,38 @@ public:
 	// Public logging
 	void LogTacticalMessage(CvString& strMsg, bool bSkipLogDominanceZone = true);
 
-private:
+public:
 
+	// SI specifically defined functions
+#ifdef SI_LOGS
+	void SI_LogTacticalMessage(CvString& strMsg);
+	void SI_LogInfluenceMessage(CvString& strMsg);
+	void SI_LogRandomMessage(CvString& strMsg);
+	void SI_InfluenceMapInit();
+	void SI_PlaceInfluence();
+	void SI_InfluenceMapPropagate(int iPlotX, int iPlotY, int iRange, int iValue);
+	void SI_InfluenceMapAdd(int iPlotX, int iPlotY, int iValue);
+	void SI_InfluenceMapUpdate(int iPlotX, int iPlotY, int iValue);
+	void SI_DisplayInfluenceStatus();
+	void SI_DisplayDangerStatus();
+	void SI_DisplayOccupationStatus();
+	int SI_InfluenceMapGetInfluence(int iPlotX, int iPlotY);
+#endif
+#ifdef SI_SELFISH_PHASE
+	void SI_Setup();
+	void SI_SelfishPhase();
+#endif
+#ifdef SI_NEGOTIATION_PHASE
+	void SI_NegotiationPhase();
+	bool SI_ActionValidation(CvSITacticalIntent* intent, CvSITacticalIntent* newIntent);
+	bool SI_MoveValidation(CvPlot* pPlot);
+	void SI_ProcessMoves();
+#endif
+#ifdef SI_HEURISTIC_EVALUATION
+	CvSITacticalIntent getHeuristicEvaluation(UnitHandle pUnit, TacticalList::iterator ittargets);
+#endif
+
+private:
 	// Internal turn update routines - commandeered unit processing
 	void UpdatePostures();
 	AITacticalPosture SelectPosture(CvTacticalDominanceZone* pZone, AITacticalPosture eLastPosture);
@@ -944,6 +1055,12 @@ private:
 	// Logging functions
 	CvString GetLogFileName(CvString& playerName) const;
 	CvString GetTacticalMissionName(AITacticalMission eMission) const;
+
+	//// SI Class data ////
+	IntentList m_Intents;
+	//CvInfluenceMap* m_pInfluenceMap;
+	std::vector<int> m_InfluenceMap;
+	std::vector<int> m_OccupiedPlots;
 
 	// Class data
 	CvPlayer* m_pPlayer;

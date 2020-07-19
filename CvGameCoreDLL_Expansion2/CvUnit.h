@@ -1484,8 +1484,8 @@ protected:
 	bool CanFallBackFromMelee(CvUnit& pAttacker);
 	bool DoFallBackFromMelee(CvUnit& pAttacker);
 
-private:
-
+//private:
+public:
 	mutable MissionQueue m_missionQueue;
 };
 

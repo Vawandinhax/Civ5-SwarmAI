@@ -157,6 +157,8 @@ typedef wchar_t          wchar;
 #include "CvAdvisorCounsel.h"
 #include "CvAdvisorRecommender.h"
 
+#include "CvInfluenceMap.h"
+
 using namespace fastdelegate;
 
 #ifdef FINAL_RELEASE

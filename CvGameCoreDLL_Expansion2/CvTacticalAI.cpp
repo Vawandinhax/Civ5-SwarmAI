@@ -15,6 +15,7 @@
 #include "cvStopWatch.h"
 #include "CvMilitaryAI.h"
 #include "CvTypes.h"
+#include "CvInfluenceMap.h"
 
 #include "LintFree.h"
 
@@ -355,11 +356,22 @@ void CvTacticalAI::CommandeerUnits()
 	UnitHandle pLoopUnit;
 	int iLoop;
 
+	// SI
+	CvString strMsg;
+	strMsg.Format("Commandeering Units");
+	SI_LogTacticalMessage(strMsg);
+	CvString playername = m_pPlayer->getCivilizationShortDescription();
+	CvString playerportugal;
+	playerportugal.Format("Portugal");
+	//int iTurn = GC.getGame().getElapsedGameTurns();
+	//
+
 	m_CurrentTurnUnits.clear();
 
 	// Loop through our units
 	for(pLoopUnit = m_pPlayer->firstUnit(&iLoop); pLoopUnit; pLoopUnit = m_pPlayer->nextUnit(&iLoop))
-	{
+	{	
+
 		// Never want immobile/dead units, explorers, ones that have already moved or automated human units
 		if(pLoopUnit->TurnProcessed() || pLoopUnit->isDelayedDeath() || pLoopUnit->AI_getUnitAIType() == UNITAI_UNKNOWN ||  pLoopUnit->AI_getUnitAIType() == UNITAI_EXPLORE || !pLoopUnit->canMove() || pLoopUnit->isHuman())
 		{
@@ -381,9 +393,21 @@ void CvTacticalAI::CommandeerUnits()
 
 		else
 		{
-			// Is this one in an operation we can't interrupt?
 			int iArmyID = pLoopUnit->getArmyID();
 			const CvArmyAI* army = m_pPlayer->getArmyAI(iArmyID);
+
+			// SI - We can always interrupt Operations, since they are badly made anyways
+			if(playername.compare(playerportugal) == 0)
+			{	
+				pLoopUnit->setTacticalMove((TacticalAIMoveTypes)m_CachedInfoTypes[eTACTICAL_UNASSIGNED]);
+				m_CurrentTurnUnits.push_back(pLoopUnit->GetID());
+				strMsg.Format("Commandeer Units: Commandeering Unit - %s", pLoopUnit->getUnitInfo().GetDescription());
+				SI_LogTacticalMessage(strMsg);
+				continue;
+			}
+			// 
+
+			// Is this one in an operation we can't interrupt?
 			if(iArmyID != FFreeList::INVALID_INDEX && NULL != army && !army->CanTacticalAIInterruptUnit(pLoopUnit->GetID()))
 			{
 				pLoopUnit->setTacticalMove(NO_TACTICAL_MOVE);
@@ -422,7 +446,82 @@ void CvTacticalAI::Update()
 	FindTacticalTargets();
 
 	// Loop through each dominance zone assigning moves
+#ifdef SI_SELFISH_PHASE
+	CvString playername = m_pPlayer->getCivilizationShortDescription();
+	CvString playerportugal;
+	playerportugal.Format("Portugal");
+	//int iTurn = GC.getGame().getElapsedGameTurns();
+	if(playername.compare(playerportugal) == 0)
+	{	
+		// INFLUENCE MAP
+		// Array initialization
+		playerportugal.Format("INITIALIZING INFLUENCE MAP");
+		SI_LogTacticalMessage(playerportugal);					
+		SI_InfluenceMapInit();
+		playerportugal.Format("FINISHED INFLUENCE MAP");
+		SI_LogTacticalMessage(playerportugal);
+
+		// Place Influence on the Map and Propagate it	
+		playerportugal.Format("PLACING INFLUENCE ON MAP");
+		SI_LogTacticalMessage(playerportugal);		
+		SI_PlaceInfluence();
+		playerportugal.Format("FINISHED PLACING INFLUENCE ON MAP");
+		SI_LogTacticalMessage(playerportugal);
+
+		// SI ROUTINES
+		// Clear Mission Queue and Print Info about Units
+		playerportugal.Format("SI SETUP BEGIN");
+		SI_LogTacticalMessage(playerportugal);
+		SI_Setup();
+		playerportugal.Format("SI SETUP END");
+		SI_LogTacticalMessage(playerportugal);
+
+		// Clear Last Turn Intents
+		playerportugal.Format("SI SELFISH PHASE BEGIN - Clearing last turn Intents");
+		SI_LogTacticalMessage(playerportugal);
+		m_Intents.clear();
+
+		// Selfish Phase processing
+		playerportugal.Format("SI SELFISH PHASE BEGIN - Processing Intents");
+		SI_LogTacticalMessage(playerportugal);
+		SI_SelfishPhase();
+		playerportugal.Format("SI SELFISH PHASE END");
+		SI_LogTacticalMessage(playerportugal);
+
+		// Negotiation Phase processing
+		playerportugal.Format("NEGOTIATION PHASE BEGIN");
+		SI_LogTacticalMessage(playerportugal);
+		SI_NegotiationPhase();
+		playerportugal.Format("NEGOTIATION PHASE END");
+		SI_LogTacticalMessage(playerportugal);
+
+		// Post Processing phase, translating all SI movements to Civ5 moves that units can "understand"
+		playerportugal.Format("SI PROCESSING PHASE BEGIN");
+		SI_LogTacticalMessage(playerportugal);
+		SI_ProcessMoves();
+		playerportugal.Format("SI PROCESSING PHASE END");
+		SI_LogTacticalMessage(playerportugal);
+	
+		// For debuggin purposes - IGNORE
+		CvString strMsg;
+		UnitHandle pLoopUnit;
+		int iLoop;
+		for(pLoopUnit = m_pPlayer->firstUnit(&iLoop); pLoopUnit; pLoopUnit = m_pPlayer->nextUnit(&iLoop))
+		{
+			strMsg.Format("Unit %s, At position X: %d, Y: %d, Available Moves: %d, Queue Length: %d",pLoopUnit->getUnitInfo().GetDescription(), pLoopUnit->getX(), pLoopUnit->getY(), pLoopUnit->getUnitInfo().GetMoves(), pLoopUnit->GetLengthMissionQueue());
+			SI_LogTacticalMessage(strMsg);
+		}
+	}
+	else
+	{
+		// Civ5 AI's Routines (Performed to avoid future conflicts, even tough they probably have zero impact
+		EstablishTacticalPriorities();
+		UpdatePostures();
+		ProcessDominanceZones();
+	}
+#else
 	ProcessDominanceZones();
+#endif //SI_SELFISH_PHASE
 }
 
 // TEMPORARY DOMINANCE ZONES
@@ -6010,7 +6109,11 @@ void CvTacticalAI::ExecuteAttack(CvTacticalTarget* pTarget, CvPlot* pTargetPlot,
 	void* pFirstAttacker = NULL;
 	bool bFirstAttackRanged = false;
 	bool bFirstAttackCity = false;
-
+#ifdef SI_COMPLETE_LOGS
+	CvString strMsg;
+	strMsg.Format("Check if Plot is Targeted");
+	SI_LogTacticalMessage(strMsg);
+#endif
 	if(PlotAlreadyTargeted(pTargetPlot) != -1)
 	{
 		return;
@@ -6018,7 +6121,10 @@ void CvTacticalAI::ExecuteAttack(CvTacticalTarget* pTarget, CvPlot* pTargetPlot,
 
 	// How much damage do we still need to inflict?
 	int iDamageRemaining = (pTarget->GetAuxIntData() * (100 + GC.getAI_TACTICAL_OVERKILL_PERCENT())) / 100;
-
+#ifdef SI_COMPLETE_LOGS
+	strMsg.Format("Apply damage from city bombards");
+	SI_LogTacticalMessage(strMsg);
+#endif
 	// Start by applying damage from city bombards
 	for(unsigned int iI = 0; iI < m_CurrentMoveCities.size() && iDamageRemaining > 0; iI++)
 	{
@@ -6036,7 +6142,10 @@ void CvTacticalAI::ExecuteAttack(CvTacticalTarget* pTarget, CvPlot* pTargetPlot,
 			iDamageRemaining -= m_CurrentMoveCities[iI].GetExpectedTargetDamage();
 		}
 	}
-
+#ifdef SI_COMPLETE_LOGS
+	strMsg.Format("Loop for Ranged Units");
+	SI_LogTacticalMessage(strMsg);
+#endif
 	// First loop is ranged units only
 	for(unsigned int iI = 0; iI < m_CurrentMoveUnits.size() && iDamageRemaining > 0; iI++)
 	{
@@ -6118,13 +6227,19 @@ void CvTacticalAI::ExecuteAttack(CvTacticalTarget* pTarget, CvPlot* pTargetPlot,
 			}
 		}
 	}
-
+#ifdef SI_COMPLETE_LOGS
+	strMsg.Format("Check if target is city");
+	SI_LogTacticalMessage(strMsg);
+#endif
 	// If target is city, want to get in one melee attack, so set damage remaining to 1
 	if(pTarget->GetTargetType() == AI_TACTICAL_TARGET_CITY && iDamageRemaining < 1)
 	{
 		iDamageRemaining = 1;
 	}
-
+#ifdef SI_COMPLETE_LOGS
+	strMsg.Format("Building List of Adjacent Plots");
+	SI_LogTacticalMessage(strMsg);
+#endif
 	// Make a list of adjacent plots
 	std::vector<CvPlot *> plotList;
 	for(int iDirectionLoop = 0; iDirectionLoop < NUM_DIRECTION_TYPES; ++iDirectionLoop)
@@ -6140,7 +6255,10 @@ void CvTacticalAI::ExecuteAttack(CvTacticalTarget* pTarget, CvPlot* pTargetPlot,
 			}
 		}
 	}
-
+#ifdef SI_COMPLETE_LOGS
+	strMsg.Format("Melee Units Loop");
+	SI_LogTacticalMessage(strMsg);
+#endif
 	// Second loop are only melee units
 	for(unsigned int iI = 0; iI < m_CurrentMoveUnits.size() && iDamageRemaining > 0; iI++)
 	{
@@ -6237,7 +6355,10 @@ void CvTacticalAI::ExecuteAttack(CvTacticalTarget* pTarget, CvPlot* pTargetPlot,
 			}
 		}
 	}
-
+#ifdef SI_COMPLETE_LOGS
+	strMsg.Format("Launch Attack");
+	SI_LogTacticalMessage(strMsg);
+#endif
 	// Start up first attack
 	if(pFirstAttacker)
 	{
@@ -10703,7 +10824,12 @@ CvString CvTacticalAI::GetLogFileName(CvString& playerName) const
 	{
 		strLogName = "PlayerTacticalAILog.csv";
 	}
-
+#ifdef SI_LOGS
+	if(playerName == "Portugal")
+	{
+		strLogName = "SI_PlayerTacticalAILog_Portugal.csv";
+	}
+#endif
 	return strLogName;
 }
 
@@ -10749,4 +10875,880 @@ FDataStream& operator>>(FDataStream& loadFrom, AITacticalMission& writeTo)
 bool TacticalAIHelpers::CvBlockingUnitDistanceSort(CvBlockingUnit obj1, CvBlockingUnit obj2)
 {
 	return obj1.GetDistanceToTarget() < obj2.GetDistanceToTarget();
+}
+
+/////////////////
+////// SI ///////
+/////////////////
+
+
+
+/* GENERAL ALGORITHM LAYOUT
+
+Input: 
+- Result from CommandeerUnits(), a list with the units awaiting commands
+- Result from FindTacticalTargets(), a list with every enemy targets
+
+Output:
+- A list with every Intent, an object containing every action
+
+Update(){
+	UpdatePostures()
+	ProcessDominanceZones()
+}
+
+The algorithm replaces this methods, and then performs a "translation"
+between the Intent names and the Tactical Moves already defined by CIV_AI
+*/
+
+/////////////////////////////////////////////////////////
+// LOGGING FUNCTIONS
+/////////////////////////////////////////////////////////
+#ifdef SI_LOGS
+void CvTacticalAI::SI_LogTacticalMessage(CvString& strMsg)
+{
+	if(GC.getLogging() && GC.getAILogging())
+	{
+		CvString strOutBuf;
+		CvString strBaseString;
+		CvString strPlayerName;
+		FILogFile* pLog;
+
+		strPlayerName = m_pPlayer->getCivilizationShortDescription();
+		pLog = LOGFILEMGR.GetLog(GetLogFileName(strPlayerName), FILogFile::kDontTimeStamp);
+
+		// Get the leading info for this line
+		strBaseString.Format("SI - Turn: %03d, ", GC.getGame().getElapsedGameTurns());
+		strBaseString += strPlayerName + ", ";
+		strOutBuf = strBaseString + strMsg;
+
+		pLog->Msg(strOutBuf);
+	}
+}
+
+// Writes on file InfluenceMap.csv for debugging purposes
+void CvTacticalAI::SI_LogInfluenceMessage(CvString& strMsg)
+{
+	CvString strOutBuf;
+	CvString strBaseString;
+	FILogFile* pLog;
+
+	pLog = LOGFILEMGR.GetLog("InfluenceMap.csv", FILogFile::kDontTimeStamp);
+	strBaseString.Format("Influence Status - Turn: %03d, ", GC.getGame().getElapsedGameTurns());
+	strOutBuf = strBaseString + strMsg;
+
+	pLog->Msg(strOutBuf);
+	
+}
+
+// Writes on debugging file, use for random spam :)
+void CvTacticalAI::SI_LogRandomMessage(CvString& strMsg)
+{
+	CvString strOutBuf;
+	CvString strBaseString;
+	FILogFile* pLog;
+
+	pLog = LOGFILEMGR.GetLog("SI_RANDOM.csv", FILogFile::kDontTimeStamp);
+	strBaseString.Format("Turn: %03d, ", GC.getGame().getElapsedGameTurns());
+	strOutBuf = strBaseString + strMsg;
+
+	pLog->Msg(strOutBuf);
+	
+}
+#endif
+
+/////////////////////////////////////////////////////////
+// SI ROUTINES
+/////////////////////////////////////////////////////////
+#ifdef SI_SELFISH_PHASE
+// Used to Clear all Units Mission Queues and make sure there are no conflicts
+void CvTacticalAI::SI_Setup(){
+	
+	CvString strMsg;
+	UnitHandle pLoopUnit;
+	int iLoop;
+
+#ifdef SI_DEBUG	
+	list<int>::iterator it;
+
+	strMsg.Format("Units in queue ready to receive orders:");
+	SI_LogTacticalMessage(strMsg);
+	for(it = m_CurrentTurnUnits.begin(); it != m_CurrentTurnUnits.end(); it++)
+	{
+		CvString strMsg;
+		UnitHandle pUnit = m_pPlayer->getUnit(*it);
+		strMsg.Format("Unit %s, At position X: %d, Y: %d",pUnit->getUnitInfo().GetDescription(), pUnit->getX(), pUnit->getY(), pUnit->getUnitInfo().GetMoves());
+		SI_LogTacticalMessage(strMsg);
+	}
+
+	strMsg.Format("Total Units:");
+	SI_LogTacticalMessage(strMsg);
+	for(pLoopUnit = m_pPlayer->firstUnit(&iLoop); pLoopUnit; pLoopUnit = m_pPlayer->nextUnit(&iLoop))
+	{	
+		strMsg.Format("Unit %s, At position X: %d, Y: %d",pLoopUnit->getUnitInfo().GetDescription(), pLoopUnit->getX(), pLoopUnit->getY(), pLoopUnit->getUnitInfo().GetMoves());
+		SI_LogTacticalMessage(strMsg);
+	}
+#endif
+
+	// Clear Occupied Plots
+	m_OccupiedPlots.clear();
+	int iGridSize = GC.getMap().numPlots();
+	m_OccupiedPlots.resize(iGridSize);
+	for(int i = 0; i < iGridSize; i++)
+	{	
+		m_OccupiedPlots[i] = 0;
+	}
+	
+	// Clear Unit Mission Queues and Update Occupied plots status
+	for(pLoopUnit = m_pPlayer->firstUnit(&iLoop); pLoopUnit; pLoopUnit = m_pPlayer->nextUnit(&iLoop))
+	{
+		pLoopUnit->ClearMissionQueue();
+		strMsg.Format("Unit %s, At position X: %d, Y: %d, Moves: %d, Mission Queue Length: %d",pLoopUnit->getUnitInfo().GetDescription(), pLoopUnit->getX(), pLoopUnit->getY(), pLoopUnit->getUnitInfo().GetMoves(), pLoopUnit->GetLengthMissionQueue());
+		//m_OccupiedPlots[pLoopUnit->getX() + (pLoopUnit->getY() * GC.getMap().getGridWidth())] = 1;
+
+	}
+
+
+
+#ifdef SI_DEBUG
+	for(pLoopUnit = m_pPlayer->firstUnit(&iLoop); pLoopUnit; pLoopUnit = m_pPlayer->nextUnit(&iLoop))
+	{
+		strMsg.Format("Unit: %s, Queue size: %d", pLoopUnit->getUnitInfo().GetDescription(), pLoopUnit->m_missionQueue.getLength());
+		SI_LogTacticalMessage(strMsg);
+
+		int iQueueLength = pLoopUnit->GetLengthMissionQueue();
+		for (int iI = 0; iI < iQueueLength;  iI ++)
+		{
+			strMsg.Format("Mission %d: %d", iI, pLoopUnit->GetMissionData(iI)->eMissionType);
+			SI_LogTacticalMessage(strMsg);
+		}
+	}
+#endif
+
+}
+
+// First step of the algorithm, units 
+void CvTacticalAI::SI_SelfishPhase(){
+
+	// Variable Initialization
+	list<int>::iterator it;
+	TacticalList::iterator ittargets;
+	bool bValidPlot;
+
+	// Loop through all recruited units
+	for(it = m_CurrentTurnUnits.begin(); it != m_CurrentTurnUnits.end(); it++)
+	{		
+		CvString strMsg;
+		UnitHandle pUnit = m_pPlayer->getUnit(*it);
+		strMsg.Format("Unit %s, At position X: %d, Y: %d is deciding what to do. Remaining moves: %d",pUnit->getUnitInfo().GetDescription(), pUnit->getX(), pUnit->getY(), pUnit->getUnitInfo().GetMoves());
+		SI_LogTacticalMessage(strMsg);
+
+	    CvSITacticalIntent iBestIntent;
+		CvSITacticalIntent iCurrentIntent;
+		iBestIntent.SetUnitID(pUnit->GetID());
+
+		// Loop through target list
+		for(ittargets = m_AllTargets.begin(); ittargets != m_AllTargets.end(); ittargets++)
+		{	
+			strMsg.Format("Evaluating options for target of type: %d at position X: %d, Y: %d", ittargets->GetTargetType(), ittargets->GetTargetX(), ittargets->GetTargetY());
+			SI_LogTacticalMessage(strMsg);
+			
+			//CvUnit* pTargetUnit = (CvUnit*)ittargets->GetAuxData();
+
+			iCurrentIntent = getHeuristicEvaluation(pUnit, ittargets);
+
+			if (iCurrentIntent.GetHeuristicValue() > iBestIntent.GetHeuristicValue())
+			{
+				iBestIntent.SetHeuristicValue(iCurrentIntent.GetHeuristicValue());
+				iBestIntent.SetPlot(iCurrentIntent.GetPlot());
+				iBestIntent.SetIntent(iCurrentIntent.GetIntent());
+				strMsg.Format("BEST INTENT found so far for Unit: %d, is intent: %d, targetting plot X: %d, Y: %d, valued at: %d", pUnit->getUnitInfo().GetDescription(), iBestIntent.GetIntent(), iBestIntent.GetPlot()->getX(), iBestIntent.GetPlot()->getY(), iBestIntent.GetHeuristicValue());
+				SI_LogTacticalMessage(strMsg);
+			}
+		}
+
+		// Loop through simple movements (Move to a specific plot)
+		bValidPlot = false;
+		CvMap& kMap = GC.getMap();
+		int iUnitX = pUnit->getX();
+		int iUnitY = pUnit->getY();	
+		int iRange = pUnit->getUnitInfo().GetMoves();
+
+		for(int iX = -iRange; iX <= iRange; iX++)
+		{
+			for(int iY = -iRange; iY <= iRange; iY++)
+			{
+				// Check if Plot Exists
+				CvPlot* pPlot = kMap.plot(iUnitX + iX, iUnitY + iY);
+				if(pPlot == NULL)
+				{
+					continue;
+				}
+
+				// Check if plot is within reachable distance
+				if((abs(iX) + abs(iY) - 1) > iRange)
+				{
+					continue;
+				}
+				
+				// Check if Plot is alredy occupied
+				if(!SI_MoveValidation(pPlot))
+				{
+					strMsg.Format("The plot X: %d, Y: %d is already occupied. Skipping", pPlot->getX(), pPlot->getY());
+					SI_LogTacticalMessage(strMsg);
+					continue;
+				}
+
+				// Check if Unit can reach the plot in the specified turn
+				int iTurnsToPlot = pUnit->UnitPathTo(pPlot->getX(), pPlot->getY(),0);
+
+				// If it is not possible to move to the specified plot
+				if(iTurnsToPlot == 0 || iTurnsToPlot > 2)
+				{
+					strMsg.Format("The plot X: %d, Y: %d can't be reached. It is either occupied or out of range", pPlot->getX(), pPlot->getY());
+					SI_LogTacticalMessage(strMsg);
+					continue;
+				}
+
+				// If all conditions are met, move onto heuristic evaluation
+				strMsg.Format("The plot X: %d, Y: %d is visible and reachable. Takes %d turn(s) to reach. Moving onto heuristic evaluation.", pPlot->getX(), pPlot->getY(), iTurnsToPlot);
+				SI_LogTacticalMessage(strMsg);
+				
+				int iInfluenceValue = SI_InfluenceMapGetInfluence(pPlot->getX(), pPlot->getY()) * SI_AGGRESSION_MODIFIER;
+				int iDangerValue = m_pPlayer->GetPlotDanger(*pPlot) / 100;
+				float fTerrainModifier = 1.0;
+				if(pPlot->IsRoughFeature())
+				{
+					fTerrainModifier = 1.25;
+				}
+				
+				int iNewHeuristicValue = (iInfluenceValue - (iDangerValue/fTerrainModifier));
+				strMsg.Format("Plot Heuristic evaluation: Value %d, Influence %d, Danger %d, Terrain mod %d", iNewHeuristicValue, iInfluenceValue, iDangerValue, fTerrainModifier);
+				SI_LogTacticalMessage(strMsg);
+				if (iBestIntent.GetHeuristicValue() < iNewHeuristicValue)
+				{
+					iBestIntent.SetHeuristicValue(iNewHeuristicValue);
+					iBestIntent.SetPlot(pPlot);
+					
+					// If this is the plot the Unit is Currently in, Defend Instead of Moving
+					if(iX == 0 && iY == 0)
+					{
+						iBestIntent.SetIntent(eSI_FORTIFY_HEAL);
+						strMsg.Format("BEST INTENT found so far for Unit: %d, is intent: %d - FORTIFY, valued at: %d. Influence: %d Danger: %d", pUnit->getUnitInfo().GetDescription(), iBestIntent.GetIntent(), iBestIntent.GetHeuristicValue(), SI_InfluenceMapGetInfluence(iBestIntent.GetPlot()->getX(), iBestIntent.GetPlot()->getY()), m_pPlayer->GetPlotDanger(*pPlot));
+						SI_LogTacticalMessage(strMsg);
+					}
+					else
+					{
+						iBestIntent.SetIntent(eSI_TACTICAL_MOVE);
+						strMsg.Format("BEST INTENT found so far for Unit: %d, is intent: %d - MOVE, targetting plot X: %d, Y: %d, valued at: %d. Influence: %d Danger: %d", pUnit->getUnitInfo().GetDescription(), iBestIntent.GetIntent(), iBestIntent.GetPlot()->getX(), iBestIntent.GetPlot()->getY(), iBestIntent.GetHeuristicValue(), SI_InfluenceMapGetInfluence(iBestIntent.GetPlot()->getX(), iBestIntent.GetPlot()->getY()), m_pPlayer->GetPlotDanger(*pPlot));
+						SI_LogTacticalMessage(strMsg);
+					}
+				}
+			}
+		}
+
+		// Add the best Intent to the Intent list and "Occupy" the plot
+		strMsg.Format("BEST INTENT found so far for Unit: %d, is intent: %d, targetting plot X: %d, Y: %d, valued at: %d.", pUnit->getUnitInfo().GetDescription(), iBestIntent.GetIntent(), iBestIntent.GetPlot()->getX(), iBestIntent.GetPlot()->getY(), iBestIntent.GetHeuristicValue());
+		SI_LogTacticalMessage(strMsg);	
+		//m_OccupiedPlots[iBestIntent.GetPlot()->getX() + iBestIntent.GetPlot()->getY() * GC.getMap().getGridWidth()] = 1;
+		m_Intents.push_back(iBestIntent);
+	}
+
+}
+#endif
+#ifdef SI_HEURISTIC_EVALUATION
+CvSITacticalIntent CvTacticalAI::getHeuristicEvaluation(UnitHandle pUnit, TacticalList::iterator ittargets)
+{
+	// Variables needed
+	//int iExpectedDamage = 0;
+	int iCurrentTargetHP = 100;
+	int iHeuristicValue = 0;
+	int iDanger = 0;
+	CvSITacticalIntent iCurrentIntent;
+	CvString strMsg;
+	CvPlot* pTargetPlot = GC.getMap().plot(ittargets->GetTargetX(), ittargets->GetTargetY());
+
+	// Check if target is within view range of the Unit being processed, and visible at the same time
+	if(pTargetPlot->isVisible(m_pPlayer->getTeam()) &&
+	plotDistance(pTargetPlot->getX(), pTargetPlot->getY(), pUnit->getX(), pUnit->getY()) <= SI_VIEW_RANGE)
+	{
+		
+		// If the target is an enemy unit
+		if(ittargets->GetTargetType() == AI_TACTICAL_TARGET_LOW_PRIORITY_UNIT ||
+		   ittargets->GetTargetType() == AI_TACTICAL_TARGET_MEDIUM_PRIORITY_UNIT ||
+		   ittargets->GetTargetType() == AI_TACTICAL_TARGET_HIGH_PRIORITY_UNIT )
+		{
+			CvUnit* pTargetUnit = (CvUnit*)ittargets->GetAuxData();
+			iCurrentTargetHP = pTargetUnit->GetCurrHitPoints();
+			iDanger = m_pPlayer->GetPlotDanger(*(pTargetUnit->plot()));
+
+			iHeuristicValue = 100 - (iCurrentTargetHP - 25 /* Replace 25 by expected unit damage */);
+
+			// Set new Intent
+			iCurrentIntent.SetHeuristicValue(iHeuristicValue);
+			iCurrentIntent.SetIntent(eSI_TACTICAL_ATTACK);
+			iCurrentIntent.SetPlot(pTargetPlot);
+			iCurrentIntent.SetTarget(ittargets);
+			strMsg.Format("Expected Value from attacking enemy unit at position X:%d , Y:%d : %d", pTargetPlot->getX(), pTargetPlot->getY(), iHeuristicValue);
+			SI_LogTacticalMessage(strMsg);
+		}
+
+		// If the target is an enemy city
+	}
+	else
+	{
+		strMsg.Format("Target is not in range or is not visible to current processing Unit");
+		SI_LogTacticalMessage(strMsg);
+
+		// Set the default intent
+		iCurrentIntent.SetHeuristicValue(0);
+		iCurrentIntent.SetIntent(0);
+		iCurrentIntent.SetPlot(NULL);
+		strMsg.Format("Default case, occuring on exception, valued at 0");
+		SI_LogTacticalMessage(strMsg);
+	}
+
+	return iCurrentIntent;
+}
+#endif
+
+#ifdef SI_NEGOTIATION_PHASE
+void CvTacticalAI::SI_NegotiationPhase(){
+	
+	// Variable initialization
+	bool bHasReconsidered = true;
+	IntentList::iterator itUnits;
+	IntentList::iterator itActions;
+	int iHeuristicValue;
+	int iNewHeuristicValue;
+	int iReconsiderationTotal = 1;
+	bool bReconsideration = false;
+	CvString strMsg;
+
+	// Reconsideration cycle
+	while (bHasReconsidered)
+	{  
+		bHasReconsidered = false;
+		strMsg.Format("RECONSIDERATION CYCLE: Loop Number: %d", iReconsiderationTotal);
+		SI_LogTacticalMessage(strMsg);
+
+		//for all unit in swarm do
+		for(itUnits = m_Intents.begin(); itUnits != m_Intents.end(); itUnits++)
+		{	
+			
+			// Plots
+			CvPlot* pTargetPlot = GC.getMap().plot(itUnits->GetPlot()->getX(), itUnits->GetPlot()->getY());
+
+			// Unit handles
+			UnitHandle pEnemyUnit = pTargetPlot->getVisibleEnemyDefender(m_pPlayer->GetID());
+			UnitHandle pOriginalUnit = m_pPlayer->getUnit(itUnits->GetUnitID());
+			
+			// Original Unit
+			int iEnemyUnitStrength = pEnemyUnit->GetMaxDefenseStrength(pTargetPlot,pOriginalUnit.pointer());
+			
+			// Original Unit information
+			CvPlot* pOriginalUnitPlot = GC.getMap().plot(pOriginalUnit->getX(),pOriginalUnit->getY());
+			iHeuristicValue = itUnits->GetHeuristicValue();
+			bool bOriginalRangeStrike = pOriginalUnit->canRangeStrike();
+			int iOpponentStrength = pEnemyUnit->GetMaxDefenseStrength(pEnemyUnit->plot(),pOriginalUnit.pointer(),bOriginalRangeStrike);
+			int iOriginalUnitHP = pOriginalUnit->GetCurrHitPoints();
+			int iOriginalUnitCombatDamage = pOriginalUnit->getCombatDamage(pOriginalUnit->GetMaxAttackStrength(pOriginalUnitPlot,pTargetPlot,pEnemyUnit.pointer()),iOpponentStrength,pOriginalUnit->getDamage(),false,false,false);
+			
+			int iEnemyUnitHP = pEnemyUnit->GetCurrHitPoints();
+
+			for(itActions = m_Intents.begin(); itActions != m_Intents.end(); itActions++)
+			{	
+
+				// Helping Unit information
+				UnitHandle pHelpingUnit = m_pPlayer->getUnit(itUnits->GetUnitID());
+				CvPlot* pHelpingUnitPlot = GC.getMap().plot(pHelpingUnit->getX(),pHelpingUnit->getY()); 
+				int iHelpingUnitHP = pHelpingUnit->GetCurrHitPoints();
+				int iHelpingUnitCombatDamage = pHelpingUnit->getCombatDamage(pHelpingUnit->GetMaxAttackStrength(pHelpingUnitPlot,pTargetPlot,pEnemyUnit.pointer()),iOpponentStrength,pHelpingUnit->getDamage(),false,false,false);
+				bool bRangedAttack = pHelpingUnit->canRangeStrike();
+
+				// Check if Unit is requesting for Help - Units asking for help have priority no matter what
+				/*if(itUnits->GetHelpFlag())
+				{
+
+				}*/
+
+				// Check if Unit is the same, and skip it in case it is
+				if(itUnits->GetUnitID() == itActions->GetUnitID())
+				{
+					continue;
+				}
+
+				// Check if Action is basic movement. If so, skip evaluation since two units cannot occupy the same plot
+				if(itUnits->GetIntent() == eSI_TACTICAL_MOVE || itUnits->GetIntent() == eSI_FORTIFY_HEAL)
+				{
+					continue;
+				}
+
+				iNewHeuristicValue = itActions->GetHeuristicValue();
+				// se a acao dessa unidade for superior
+				if(iHeuristicValue > iNewHeuristicValue)
+				{
+					// check is action is valid or worth doing for that unit
+					if(itUnits->GetIntent() == eSI_TACTICAL_ATTACK)
+					{
+						// Auxiliary variables initialization
+						CvString strMsg2;
+						strMsg2.Format("NEGOTIATION: Initiating calculations for combined attack");
+						SI_LogTacticalMessage(strMsg2);
+
+
+						if(bRangedAttack && pHelpingUnit->canRangeStrikeAt(pTargetPlot->getX(), pTargetPlot->getY()))
+						{	
+							// Calculate damage from helping unit
+							int iHelpingUnitCombatDamage = pOriginalUnit->getCombatDamage(pHelpingUnit->GetMaxAttackStrength(pHelpingUnitPlot,pTargetPlot,pEnemyUnit.pointer()),iOpponentStrength,pHelpingUnit->getDamage(),false,false,false);
+
+							// If total damage > 50, unit intetion = intention_i + BONUS
+							int iTotalCombatDamage = iHelpingUnitCombatDamage + iOriginalUnitCombatDamage;
+							int iEnemyResultingHP = iEnemyUnitHP - iTotalCombatDamage;
+							strMsg2.Format("NEGOTIATION: Combat Damage - Main Unit: %d \t Helping Unit: %d \t Enemy Resulting HP: %d", iOriginalUnitCombatDamage,iHelpingUnitCombatDamage,iEnemyResultingHP);
+							SI_LogTacticalMessage(strMsg2);
+
+							if(iTotalCombatDamage > 50){
+								iNewHeuristicValue += 100;
+								strMsg2.Format("NEGOTIATION: Action worth doing. New value: %d", iNewHeuristicValue);
+								SI_LogTacticalMessage(strMsg2);
+							}
+
+
+						}
+						else if (!bRangedAttack)
+						{
+							//Ver se tem spot perto para atacar
+							//Calcular dano total infligido, ver dano recebido
+						}
+												
+					}
+
+					// if action is worth doing, lets set it as the new action
+					if(bReconsideration)
+					{
+						itActions->SetIntent(itUnits->GetIntent());
+						itActions->SetHeuristicValue(itUnits->GetHeuristicValue());
+						itActions->SetPlot(itUnits->GetPlot());
+						itActions->SetTarget(itUnits->GetTarget());
+						bHasReconsidered = true;
+					}
+				}
+			}
+		}
+		iReconsiderationTotal = iReconsiderationTotal + 1;
+	}
+
+}
+
+bool CvTacticalAI::SI_ActionValidation(CvSITacticalIntent* intent, CvSITacticalIntent* newIntent)
+{
+	intent = newIntent;
+	bool bReconsideration = true;
+	return bReconsideration;
+}
+
+// Check if a Unit intends to move to an already occupied Plot
+bool CvTacticalAI::SI_MoveValidation(CvPlot* pPlot)
+{
+
+	int iPlotX = pPlot->getX();
+	int iPlotY = pPlot->getY();
+
+	if(m_OccupiedPlots[iPlotX + iPlotY * GC.getMap().getGridWidth()] == 1)
+	{
+		return false;
+	}
+
+	return true;
+}
+
+// "Converts" all SI_Moves to Missions that Civ 5 "understands"
+void CvTacticalAI::SI_ProcessMoves()
+{
+	IntentList::iterator itUnits;
+	CvString strMsg;
+	bool bAttackSuccess;
+	//bool bMoveSuccess;
+
+	for(itUnits = m_Intents.begin(); itUnits != m_Intents.end(); itUnits++)
+	{	
+		strMsg.Format("Checking Unit: ID %d, Target Plot X: %d, Y: %d, Intent: %d, Value: %d", itUnits->GetUnitID(), itUnits->GetPlot()->getX(),itUnits->GetPlot()->getY(),itUnits->GetIntent(),itUnits->GetHeuristicValue());
+		SI_LogTacticalMessage(strMsg);
+
+		// Case Attack Target
+		if(itUnits->GetIntent() == eSI_TACTICAL_ATTACK)
+		{	
+			UnitHandle pUnit = m_pPlayer->getUnit(itUnits->GetUnitID());
+			bAttackSuccess = pUnit->UnitAttack(itUnits->GetPlot()->getX(),itUnits->GetPlot()->getY(),0);
+			if(pUnit->canRangeStrike())
+			{
+				pUnit->PushMission(CvTypes::getMISSION_RANGE_ATTACK(), itUnits->GetPlot()->getX(),itUnits->GetPlot()->getY());
+			}
+			else
+			{
+				pUnit->PushMission(CvTypes::getMISSION_MOVE_TO(), itUnits->GetPlot()->getX(),itUnits->GetPlot()->getY());
+			}
+			strMsg.Format("TACTICAL ATTACK: Unit %d at plot X: %d, Y: %d will attack Unit at X: %d, Y: %d", pUnit->GetID(), pUnit->getX(), pUnit->getY(),itUnits->GetPlot()->getX(), itUnits->GetPlot()->getY());
+			SI_LogTacticalMessage(strMsg);
+			continue;
+		}
+
+		// Case Move To Plot
+		else if(itUnits->GetIntent() == eSI_TACTICAL_MOVE)
+		{
+			UnitHandle pUnit = m_pPlayer->getUnit(itUnits->GetUnitID());
+			pUnit->PushMission(CvTypes::getMISSION_MOVE_TO(), itUnits->GetPlot()->getX(), itUnits->GetPlot()->getY(), MOVE_UNITS_IGNORE_DANGER);
+			pUnit->finishMoves();
+			UnitProcessed(pUnit->GetID(), pUnit->IsCombatUnit());
+			strMsg.Format("TACTICAL MOVE: Unit %d at plot X: %d, Y: %d will move to X: %d, Y: %d",pUnit->GetID(), pUnit->getX(), pUnit->getY(),itUnits->GetPlot()->getX(), itUnits->GetPlot()->getY());
+			SI_LogTacticalMessage(strMsg);
+			continue;
+		}
+	
+
+		// Case defend plot / heal
+		else if(itUnits->GetIntent() == eSI_FORTIFY_HEAL)
+		{
+			UnitHandle pUnit = m_pPlayer->getUnit(itUnits->GetUnitID());
+			pUnit->PushMission(CvTypes::getMISSION_FORTIFY());
+			pUnit->SetFortifiedThisTurn(true);
+			pUnit->finishMoves();
+			strMsg.Format("TACTICAL HEAL: Unit %d at plot X: %d, Y: %d is Healing/Fortifying",pUnit->GetID(), pUnit->getX(), pUnit->getY());
+			SI_LogTacticalMessage(strMsg);
+			continue;
+		}
+
+		else
+		{
+			UnitHandle pUnit = m_pPlayer->getUnit(itUnits->GetUnitID());
+			pUnit->PushMission(CvTypes::getMISSION_FORTIFY());
+			pUnit->finishMoves();
+			strMsg.Format("No tactical targets found for specified Intent. Healing/Fortifying as default");
+			SI_LogTacticalMessage(strMsg);
+		}
+	}
+}
+#endif
+
+/////////////////////////////////////////////////////////
+// INFLUENCE MAP
+/////////////////////////////////////////////////////////
+
+/// Initialize the Influence Map
+void CvTacticalAI::SI_InfluenceMapInit()
+{
+	CvString strMsg;
+	strMsg.Format("Initializing Influence Map");
+	SI_LogInfluenceMessage(strMsg);		
+
+	int iGridSize = GC.getMap().numPlots();
+
+	strMsg.Format("Total Plots: %d", iGridSize);
+	SI_LogInfluenceMessage(strMsg);	
+
+	m_InfluenceMap.resize(iGridSize);
+
+	strMsg.Format("Array size: %d", m_InfluenceMap.size());
+	SI_LogInfluenceMessage(strMsg);
+
+	for(int i = 0; i < iGridSize; i++)
+	{	
+		m_InfluenceMap[i] = 0;
+	}
+	strMsg.Format("Finished Initializing Influence Map");
+	SI_LogInfluenceMessage(strMsg);	
+
+}
+
+/// Place initial influence points on the map
+void CvTacticalAI::SI_PlaceInfluence()
+{	
+	UnitHandle pLoopUnit;
+	int iLoop;
+	CvString strMsg;
+	CvString playername;
+	CvString playerportugal;
+	playerportugal.Format("Portugal");
+	
+	strMsg.Format("Initializing Influence Update - Updating for Friendly Units");
+	SI_LogInfluenceMessage(strMsg);	
+
+	//SI_DisplayOccupationStatus();
+
+	// Position Allied Units in the Influence Map
+	for(pLoopUnit = m_pPlayer->firstUnit(&iLoop); pLoopUnit; pLoopUnit = m_pPlayer->nextUnit(&iLoop))
+	{
+		SI_InfluenceMapUpdate(pLoopUnit->getX(), pLoopUnit->getY(), SI_INFLUENCE_UNIT);
+		SI_InfluenceMapPropagate(pLoopUnit->getX(), pLoopUnit->getY(), SI_INFLUENCE_RANGE, SI_INFLUENCE_UNIT);
+		strMsg.Format("Setting plot as occupied");
+		SI_LogInfluenceMessage(strMsg);	
+		//m_OccupiedPlots[pLoopUnit->getX() + pLoopUnit->getY() * GC.getMap().getGridWidth()] = 1;
+	}
+	SI_DisplayInfluenceStatus();
+
+	strMsg.Format("Influence Update - Updating for Allied Cities");
+	SI_LogInfluenceMessage(strMsg);	
+
+	// Position Allied Cities in the Influence Map
+	CvCity* pLoopCity;
+	int iLoopA;
+	for(pLoopCity = m_pPlayer->firstCity(&iLoopA); pLoopCity != NULL; pLoopCity = m_pPlayer->nextCity(&iLoopA))
+	{
+		SI_InfluenceMapUpdate(pLoopCity->plot()->getX(), pLoopCity->plot()->getY(), SI_INFLUENCE_CITY);
+		SI_InfluenceMapPropagate(pLoopCity->plot()->getX(), pLoopCity->plot()->getY(), SI_INFLUENCE_RANGE, SI_INFLUENCE_CITY);
+	}
+	SI_DisplayInfluenceStatus();
+
+	strMsg.Format("Influence Update - Updating for Enemy Units");
+	SI_LogInfluenceMessage(strMsg);	
+
+	// loop through enemy players and position Enemy Units and Cities in the Influence Map
+	for(int iPlayer = 0; iPlayer < SI_MAX_PLAYERS; iPlayer++)
+	{	
+		PlayerTypes ePlayer = (PlayerTypes)iPlayer;
+		CvPlayer& loopPlayer = GET_PLAYER(ePlayer);
+		playername = loopPlayer.getCivilizationShortDescription();
+
+		playerportugal.Format("Portugal");
+		strMsg.Format("Looking at player: %s", loopPlayer.getCivilizationShortDescription());
+		SI_LogInfluenceMessage(strMsg);	
+
+		if(playername.compare(playerportugal) == 0)
+		{	
+			strMsg.Format("Already placed influenced for: %s", loopPlayer.getCivilizationShortDescription());
+			SI_LogInfluenceMessage(strMsg);	
+			continue;
+		}
+		
+		int iLoopB;
+		strMsg.Format("Placing Influence for enemy player: %s - Placing Units", loopPlayer.getCivilizationShortDescription());
+		SI_LogInfluenceMessage(strMsg);	
+		for(pLoopUnit = loopPlayer.firstUnit(&iLoopB); pLoopUnit; pLoopUnit = loopPlayer.nextUnit(&iLoopB))
+		{
+			SI_InfluenceMapUpdate(pLoopUnit->getX(), pLoopUnit->getY(), SI_INFLUENCE_ENEMY_UNIT);
+			SI_InfluenceMapPropagate(pLoopUnit->getX(), pLoopUnit->getY(), SI_INFLUENCE_RANGE, SI_INFLUENCE_ENEMY_UNIT);
+		}
+		SI_DisplayInfluenceStatus();
+
+		strMsg.Format("Placing Influence for enemy player: %s - Placing Cities", loopPlayer.getCivilizationShortDescription());
+		SI_LogInfluenceMessage(strMsg);	
+		CvCity* pLoopCity;
+		int iLoopC;
+		for(pLoopCity = loopPlayer.firstCity(&iLoopC); pLoopCity != NULL; pLoopCity = loopPlayer.nextCity(&iLoopC))
+		{
+			SI_InfluenceMapUpdate(pLoopCity->getX(), pLoopCity->getY(), SI_INFLUENCE_ENEMY_CITY);
+			SI_InfluenceMapPropagate(pLoopCity->getX(), pLoopCity->getY(), SI_INFLUENCE_RANGE, SI_INFLUENCE_ENEMY_CITY);
+		}
+	}
+
+	strMsg.Format("Finished Updating, Displaying Final Influence Status");
+	SI_LogInfluenceMessage(strMsg);
+	
+	// Log every map to check if it was initialized correctly
+	SI_DisplayInfluenceStatus();
+	SI_DisplayDangerStatus();
+	//SI_DisplayOccupationStatus();
+}
+
+/// Helper function to propagate Influence
+void CvTacticalAI::SI_InfluenceMapPropagate(int iPlotX, int iPlotY, int iRange, int iValue)
+{
+	int iDistance;
+	int iPropagatedValue;
+	CvMap& kMap = GC.getMap();
+	CvString strMsg;
+	CvString strDebug;
+
+	strMsg.Format("Propagating Influence for unit/city at plot: %d,%d", iPlotX, iPlotY);
+	SI_LogInfluenceMessage(strMsg);	
+
+	for(int iX = -iRange; iX <= iRange; iX++)
+	{
+		for(int iY = -iRange; iY <= iRange; iY++)
+		{
+			/*if(iX == iRange && iY == iRange)
+			{
+				strDebug.Format("Finished placing influence for current unit");
+				SI_LogRandomMessage(strDebug);
+				break;
+			}*/
+
+			strDebug.Format("SI_INFLUENCE_PROPAGATE: propagating for plot X: %d, Y: %d", iPlotX+iX, iPlotY+iY);
+			SI_LogRandomMessage(strDebug);
+			// If the plot is out of bounds, ignore it
+			if((iPlotX + iX < 0) || (iPlotY + iY < 0))
+			{
+				strDebug.Format("SI_INFLUENCE_PROPAGATE: Plot out of bounds");
+				SI_LogRandomMessage(strDebug);
+				continue;
+			}
+
+			// Check if plot exists, otherwise skip iteration
+			CvPlot* pPlot = kMap.plot(iPlotX + iX, iPlotY + iY);
+			if(pPlot == NULL)
+			{
+				strDebug.Format("SI_INFLUENCE_PROPAGATE: Plot does not exist");
+				SI_LogRandomMessage(strDebug);
+				continue;
+			}
+
+			// Can't propagate Influence on the plot we are in
+			if(iX == 0 && iY == 0)
+			{
+				strDebug.Format("SI_INFLUENCE_PROPAGATE: My plot, wont propagate");
+				SI_LogRandomMessage(strDebug);
+				continue;
+			}
+
+			// Add the Units' influence value to the plot
+			iDistance = plotDistance(iPlotX, iPlotY, iPlotX + iX, iPlotY + iY);
+			int iDecay = (iDistance * SI_INFLUENCE_DECAY) * iValue;
+
+			if((iValue > 0 && iValue < iDecay) || (iValue < 0 && iValue > iDecay))
+			{
+				continue;
+			}
+			iPropagatedValue = iValue - iDecay;
+			strDebug.Format("Adding value: %d to the plot", iPropagatedValue);
+			SI_LogRandomMessage(strDebug);
+			SI_InfluenceMapAdd(iPlotX + iX, iPlotY + iY, iPropagatedValue);
+		}
+	}
+}
+
+/// Updates the Influence plot
+void CvTacticalAI::SI_InfluenceMapUpdate(int iPlotX, int iPlotY, int iValue)
+{
+	const int idx = iPlotX + iPlotY * GC.getMap().getGridWidth();
+	m_InfluenceMap[idx] = iValue;
+}
+
+/// Add an amount of influence to a given tile
+void CvTacticalAI::SI_InfluenceMapAdd(int iPlotX, int iPlotY, int iValue)
+{
+	const int idx = iPlotX + iPlotY * GC.getMap().getGridWidth();
+	m_InfluenceMap[idx] += iValue;
+}
+
+/// Return the Influence value of a given plot
+int CvTacticalAI::SI_InfluenceMapGetInfluence(int iPlotX, int iPlotY)
+{
+	const int idx = iPlotX + iPlotY * GC.getMap().getGridWidth();
+	return m_InfluenceMap[idx];
+}
+
+/////////////////////////////////////////////////////////
+// DISPLAY FUNCTIONS
+/////////////////////////////////////////////////////////
+
+/// Display the Influence in a friendlier manner
+void CvTacticalAI::SI_DisplayInfluenceStatus()
+{
+
+	int iX;
+	int iY;
+	int iInfluenceValue;
+	int iNumPlots = GC.getMap().numPlots();
+	int iGridWidth = GC.getMap().getGridWidth();
+	int iGridHeigth = GC.getMap().getGridHeight();
+	CvString strHeader;
+	CvString strBody;
+	CvString strAux;
+
+	strHeader.Format("INFLUENCE MAP - Grid Width: %d, Grid Heigth: %d, Total Plots: %d", iGridWidth, iGridHeigth, iNumPlots);
+	SI_LogInfluenceMessage(strHeader);
+
+	for(iY = iGridHeigth - 1; iY >= 0; iY --)
+	{	
+		strBody.Format("");
+		for(iX = 0; iX < iGridWidth; iX ++)
+		{
+			iInfluenceValue = m_InfluenceMap[iX + iY * iGridWidth];
+			if(iInfluenceValue < 0)
+			{
+				strAux.Format(" %03d  ,", iInfluenceValue);
+			}
+			else
+			{
+				strAux.Format("  %03d  ,", iInfluenceValue);
+			}
+			strBody += strAux;
+
+		}
+
+		SI_LogInfluenceMessage(strBody);		
+	}
+}
+
+// Display the danger map in a friendlier manner
+void CvTacticalAI::SI_DisplayDangerStatus()
+{
+
+	int iX;
+	int iY;
+	int iDangerValue;
+	int iNumPlots = GC.getMap().numPlots();
+	int iGridWidth = GC.getMap().getGridWidth();
+	int iGridHeigth = GC.getMap().getGridHeight();
+	CvString strHeader;
+	CvString strBody;
+	CvString strAux;
+	CvPlot* pPlot;
+	CvMap& kMap = GC.getMap();
+
+	strHeader.Format("DANGER MAP - Grid Width: %d, Grid Heigth: %d, Total Plots: %d", iGridWidth, iGridHeigth, iNumPlots);
+	SI_LogInfluenceMessage(strHeader);
+
+	for(iY = iGridHeigth - 1; iY >= 0; iY --)
+	{	
+		strBody.Format("");
+		for(iX = 0; iX < iGridWidth; iX ++)
+		{
+			CvPlot* pPlot = kMap.plot(iX, iY);
+			iDangerValue = m_pPlayer->GetPlotDanger(*pPlot);
+			if(iDangerValue < 0)
+			{
+				strAux.Format(" %04d  ,", iDangerValue);
+			}
+			else
+			{
+				strAux.Format("  %04d  ,", iDangerValue);
+			}
+			strBody += strAux;
+		}
+
+		SI_LogInfluenceMessage(strBody);		
+	}
+}
+
+// Display the occupied slots map in a friendlier manner
+void CvTacticalAI::SI_DisplayOccupationStatus()
+{
+
+	int iX;
+	int iY;
+	int iOccupied;
+	int iNumPlots = GC.getMap().numPlots();
+	int iGridWidth = GC.getMap().getGridWidth();
+	int iGridHeigth = GC.getMap().getGridHeight();
+	CvString strBody;
+	CvString strAux;
+	CvString strHeader;
+
+	strHeader.Format("OCCUPATION MAP - Grid Width: %d, Grid Heigth: %d, Total Plots: %d", iGridWidth, iGridHeigth, iNumPlots);
+	SI_LogRandomMessage(strHeader);
+
+	for(iY = iGridHeigth - 1; iY >= 0; iY --)
+	{	
+		strBody.Format("");
+		for(iX = 0; iX < iGridWidth; iX ++)
+		{
+			iOccupied = m_OccupiedPlots[iX + iY * iGridWidth];
+			strAux.Format(" %01d ,", iOccupied);
+			strBody += strAux;
+		}
+
+		SI_LogRandomMessage(strBody);		
+	}
 }

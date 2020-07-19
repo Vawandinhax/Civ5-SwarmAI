@@ -300,6 +300,10 @@
 				>
 			</File>
 			<File
+				RelativePath=".\CvInfluenceMap.cpp"
+				>
+			</File>
+			<File
 				RelativePath=".\CvInfos.cpp"
 				>
 			</File>
@@ -707,6 +711,10 @@
 			</File>
 			<File
 				RelativePath=".\CvImprovementClasses.h"
+				>
+			</File>
+			<File
+				RelativePath=".\CvInfluenceMap.h"
 				>
 			</File>
 			<File

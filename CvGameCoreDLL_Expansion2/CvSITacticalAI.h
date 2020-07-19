@@ -12,13 +12,13 @@
 #include "CvTacticalAI.h"
 
 // Intent types
-enum TacticalIntentTypes
+/*enum TacticalIntentTypes
 {
 	eNO_INTENT = -1,
 	eATTACK,
 	eMOVE,
 	eCAPTURE,
-};
+};*/
 
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 //  CLASS:      CvSITacticalIntent
@@ -28,7 +28,7 @@ enum TacticalIntentTypes
 //!  - Created on CvSISelfishPhase()
 //!  - Updated during CvSINegotiationPhase()
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-class CvSITacticalIntent
+/*class CvSITacticalIntent
 {
 public:
 	CvSITacticalIntent()
@@ -67,7 +67,7 @@ private:
 	int m_eIntent;
 	int m_iUnitID;
 };
-
+*/
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 //  CLASS:      CvSITacticalAI
 //!  \brief		An alternative to tactical AI based on Swarm Intelligence

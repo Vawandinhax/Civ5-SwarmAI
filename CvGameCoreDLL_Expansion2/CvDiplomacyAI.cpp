@@ -5345,6 +5345,16 @@ bool CvDiplomacyAI::IsWantsPeaceWithPlayer(PlayerTypes ePlayer) const
 	CvAssertMsg(ePlayer >= 0, "DIPLOMACY_AI: Invalid Player Index.  Please send Jon this with your last 5 autosaves and what changelist # you're playing.");
 	CvAssertMsg(ePlayer < MAX_CIV_PLAYERS, "DIPLOMACY_AI: Invalid Player Index.  Please send Jon this with your last 5 autosaves and what changelist # you're playing.");
 
+#ifdef SI_NO_PEACE
+	CvString playername = m_pPlayer->getCivilizationShortDescription();
+	CvString playerportugal;
+	playerportugal.Format("Portugal");
+	if(playername.compare(playerportugal) == 0)
+	{
+		return false;
+	}
+#endif
+
 	int iRequestPeaceTurnThreshold = /*4*/ GC.getREQUEST_PEACE_TURN_THRESHOLD();
 
 	if(!GET_TEAM(m_pPlayer->getTeam()).canChangeWarPeace(GET_PLAYER(ePlayer).getTeam()))
